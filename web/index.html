@@ -33,6 +33,12 @@
     <p class="hint">Pega el mensaje de anotados tal como sale en Discord (pueden ser varias partys).</p>
     <textarea id="list" rows="10" placeholder="PARTY 1 · posiciones 1–20&#10;1. 👑 Golem — @Daitza 🔒&#10;..."></textarea>
     <div id="list-summary" class="hint"></div>
+    <details>
+      <summary>Lista de miembros del gremio (opcional, para ver quién skipeó)</summary>
+      <p class="hint">Exporta la lista de miembros desde el gremio en el juego y pega aquí el texto ("Character Name", "Last Seen", "Roles"). Expórtala durante o justo después de la CTA: «Online» se refiere al momento de exportar.</p>
+      <textarea id="members" rows="6" placeholder="&quot;Character Name&quot; &quot;Last Seen&quot; &quot;Roles&quot;&#10;&quot;Daitza&quot; &quot;Online&quot; &quot;Officer&quot;"></textarea>
+      <div id="members-summary" class="hint"></div>
+    </details>
   </div>
 
   <div class="step">
@@ -63,6 +69,7 @@
     <div class="row">
       <label><input type="checkbox" id="opt-ok"> Incluir los correctos</label>
       <label><input type="checkbox" id="opt-extra" checked> Incluir GENTE NO REGISTRADA</label>
+      <label><input type="checkbox" id="opt-skip" checked> Incluir conectados que no fueron</label>
       <label><input type="checkbox" id="opt-tier"> Mostrar tier del arma</label>
     </div>
     <div id="discord"></div>

@@ -152,6 +152,59 @@ function parseList(text) {
   return { title, entries };
 }
 
+// The guild member list exported from the game: "Character Name", "Last Seen"
+// ("Online" or a UTC date, MM/DD/YYYY HH:MM:SS) and "Roles", tab separated.
+function parseMembers(text) {
+  const members = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const fields = raw.split(/\t|","|";"/).map((f) => f.trim().replace(/^"|"$/g, "").trim());
+    if (fields.length < 2 || !fields[0] || /character\s*name|nombre/i.test(fields[0])) continue;
+    const [name, seen, roles = ""] = fields;
+    let lastSeen = null;
+    const online = /^(online|en l[ií]nea|conectado)$/i.test(seen);
+    const d = seen.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (d) {
+      let [month, day] = [Number(d[1]), Number(d[2])];
+      if (month > 12) [month, day] = [day, month];
+      lastSeen = new Date(Date.UTC(Number(d[3]), month - 1, day, Number(d[4]), Number(d[5]), Number(d[6] || 0)));
+    }
+    if (!online && !lastSeen) continue;
+    members.push({ name, online, lastSeen, roles: roles.split(";").filter(Boolean) });
+  }
+  return members;
+}
+
+function showMembersSummary() {
+  const members = parseMembers($("members").value);
+  const online = members.filter((m) => m.online).length;
+  $("members-summary").textContent = members.length ? `${members.length} miembros, ${online} online al exportar.` : "";
+  try { localStorage.setItem("cta-members", $("members").value); } catch {}
+}
+
+const SKIP_ORDER = { during: 0, online: 1, after: 2 };
+const SKIP_LABEL = {
+  during: "Se desconectó durante la CTA",
+  online: "Online al exportar la lista",
+  after: "Se desconectó después de la CTA",
+};
+
+// Members connected around the CTA who are in none of the marked killboards.
+// "Last Seen" is the last logout, so only a logout inside the battles' window
+// proves the player was online during it; "Online" or a later logout is
+// weaker: they may have logged in after the CTA.
+function findSkippers(members, players, battleList, rows) {
+  const start = Math.min(...battleList.map((b) => new Date(b.startTime)));
+  const end = Math.max(...battleList.map((b) => new Date(b.endTime)));
+  const signed = new Map(rows.map((r) => [norm(r.found?.player.name || r.discord), r]));
+  return members.filter((m) => !players.has(norm(m.name))).map((m) => {
+    let when = null;
+    if (m.lastSeen && m.lastSeen >= start && m.lastSeen <= end) when = "during";
+    else if (m.online) when = "online";
+    else if (m.lastSeen && m.lastSeen > end) when = "after";
+    return when && { ...m, when, signed: signed.get(norm(m.name)) || null };
+  }).filter(Boolean).sort((a, b) => SKIP_ORDER[a.when] - SKIP_ORDER[b.when] || a.name.localeCompare(b.name));
+}
+
 function showListSummary() {
   const { title, entries } = parseList($("list").value);
   const signed = entries.filter((e) => e.discord);
@@ -353,7 +406,8 @@ async function analyze() {
   const ids = selectedIds();
   const { title, entries } = parseList($("list").value);
   const signed = entries.filter((e) => e.discord);
-  if (!signed.length) return showError("Pega primero la lista del bot.");
+  const members = parseMembers($("members").value);
+  if (!signed.length && !members.length) return showError("Pega la lista del bot o la lista de miembros.");
   if (!ids.length) return showError("Marca al menos una batalla (o pega su ID).");
   $("analyze").disabled = true;
   try {
@@ -375,7 +429,9 @@ async function analyze() {
     }
     for (const r of rows) Object.assign(r, judge(r, r.found));
     const extras = [...players.entries()].filter(([k]) => !taken.has(k)).map(([, p]) => p);
-    lastResult = { title, rows, extras, battles: fetched.map((f) => f.battle), guild };
+    const battleList = fetched.map((f) => f.battle);
+    const skippers = members.length ? findSkippers(members, players, battleList, rows) : null;
+    lastResult = { title, rows, extras, skippers, battles: battleList, guild };
     $("progress").textContent = "";
     renderResults();
   } catch (err) {
@@ -404,7 +460,7 @@ function expectedHtml(ids) {
 }
 
 function renderResults() {
-  const { rows, extras, battles: fetched, guild } = lastResult;
+  const { rows, extras, skippers, battles: fetched, guild } = lastResult;
   const counts = {};
   for (const r of rows) counts[r.status] = (counts[r.status] || 0) + 1;
   let party = null;
@@ -436,9 +492,21 @@ function renderResults() {
     <table><thead><tr><th>#</th><th>Arma anotada</th><th>Discord</th><th>En el juego</th><th>Usó en la batalla</th><th>Estado</th></tr></thead>
     <tbody id="result-body">${body}</tbody></table>
     ${extras.length ? `<h2>👀 GENTE NO REGISTRADA (${extras.length})</h2><p class="hint">Jugadores del gremio que estuvieron en la batalla pero no aparecen en la lista del bot.</p>
-      <table><thead><tr><th>Jugador</th><th>Usó</th><th>K / D</th></tr></thead><tbody>${extraRows}</tbody></table>` : ""}`;
+      <table><thead><tr><th>Jugador</th><th>Usó</th><th>K / D</th></tr></thead><tbody>${extraRows}</tbody></table>` : ""}
+    ${skippers ? skippersHtml(skippers) : ""}`;
   $("discord-step").hidden = false;
   renderDiscord();
+}
+
+function skippersHtml(skippers) {
+  const body = skippers.map((m) => `<tr>
+    <td>${esc(m.name)}</td>
+    <td>${esc(SKIP_LABEL[m.when])}${m.lastSeen ? ` <span class="muted">(${fmtTime(m.lastSeen)})</span>` : ""}</td>
+    <td>${m.signed ? `Sí, puesto ${m.signed.pos} (${esc(m.signed.weapon)})` : '<span class="muted">No</span>'}</td>
+    <td class="muted">${esc(m.roles.join(", "))}</td></tr>`).join("");
+  return `<h2>🚫 CONECTADOS QUE NO FUERON (${skippers.length})</h2>
+    <p class="hint">Miembros de la lista del juego que no aparecen en ningún killboard marcado. «Se desconectó durante la CTA» es lo más seguro. «Online al exportar» y «después de la CTA» pueden ser gente que entró cuando la CTA ya había terminado. Quien fue pero no estuvo en ninguna kill tampoco sale en el killboard.</p>
+    ${skippers.length ? `<table><thead><tr><th>Jugador</th><th>Conexión</th><th>Anotado</th><th>Roles</th></tr></thead><tbody>${body}</tbody></table>` : ""}`;
 }
 
 function usedText(r, withTier) {
@@ -449,7 +517,7 @@ function usedText(r, withTier) {
 }
 
 function discordMessage() {
-  const { title, rows, extras, battles: fetched, guild } = lastResult;
+  const { title, rows, extras, skippers, battles: fetched, guild } = lastResult;
   const withTier = $("opt-tier").checked;
   const who = (r) => `@${r.discord}` + (r.found?.guess || (r.found && norm(r.found.player.name) !== norm(r.discord)) ? ` (${r.found.player.name})` : "");
   const line = (r, extra) => `\`${String(r.pos).padStart(2, " ")}\` ${r.weapon} — ${who(r)}${extra ? ` → ${extra}` : ""}`;
@@ -461,7 +529,7 @@ function discordMessage() {
   const out = [];
   out.push(`## 🔎 Revisión de armas · ${title || "CTA"} · ${guild.Name}`);
   out.push(`Batalla${fetched.length > 1 ? "s" : ""}: ${fetched.map((b) => `\`${b.id}\` (${fmtTime(b.startTime)})`).join(", ")}`);
-  out.push(`Anotados: **${rows.length}** · ✅ ${ok.length} · ❌ ${wrong.length} · ⚠️ ${review.length} · 👻 ${absent.length}`);
+  if (rows.length) out.push(`Anotados: **${rows.length}** · ✅ ${ok.length} · ❌ ${wrong.length} · ⚠️ ${review.length} · 👻 ${absent.length}`);
   if (wrong.length) {
     out.push("", `### ❌ Usaron otra arma (${wrong.length})`);
     wrong.forEach((r) => out.push(line(r, `usó **${usedText(r, withTier)}**`)));
@@ -479,6 +547,13 @@ function discordMessage() {
   if ($("opt-ok").checked && ok.length) {
     out.push("", `### ✅ Correctos (${ok.length})`);
     ok.forEach((r) => out.push(line(r)));
+  }
+  if ($("opt-skip").checked && skippers?.length) {
+    out.push("", `### 🚫 Conectados que no fueron (${skippers.length})`);
+    for (const when of Object.keys(SKIP_ORDER)) {
+      const group = skippers.filter((m) => m.when === when);
+      if (group.length) out.push(`*${SKIP_LABEL[when]}:* ` + group.map((m) => m.name + (m.signed ? " (anotado)" : "")).join(", "));
+    }
   }
   if ($("opt-extra").checked && extras.length) {
     out.push("", `### 👀 GENTE NO REGISTRADA (${extras.length})`);
@@ -550,6 +625,7 @@ function bind() {
     document.querySelectorAll(".tab-panel").forEach((p) => (p.hidden = p.id !== `tab-${b.dataset.tab}`));
   }));
   $("list").addEventListener("input", showListSummary);
+  $("members").addEventListener("input", showMembersSummary);
   $("load-battles").addEventListener("click", () => loadBattles(false));
   $("more-battles").addEventListener("click", () => loadBattles(true));
   $("analyze").addEventListener("click", analyze);
@@ -567,7 +643,7 @@ function bind() {
     try { localStorage.setItem(`cta-${id}`, $(id).value); } catch {}
     if (guildInfo) renderBattles();
   }));
-  ["opt-ok", "opt-extra", "opt-tier"].forEach((id) => $(id).addEventListener("change", renderDiscord));
+  ["opt-ok", "opt-extra", "opt-skip", "opt-tier"].forEach((id) => $(id).addEventListener("change", renderDiscord));
 
   $("battles").addEventListener("click", (e) => {
     const row = e.target.closest("tr.battle");
@@ -645,12 +721,14 @@ async function init() {
   bind();
   try {
     $("list").value = localStorage.getItem("cta-list") || "";
+    $("members").value = localStorage.getItem("cta-members") || "";
     for (const id of ["min-players", "min-guild"]) {
       const v = localStorage.getItem(`cta-${id}`);
       if (v !== null) $(id).value = v;
     }
   } catch {}
   showListSummary();
+  showMembersSummary();
   renderWeapons();
   renderPlayers();
   loadBattles(false);

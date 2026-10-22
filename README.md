@@ -12,6 +12,9 @@ No usa albionbb: lee la misma API pública del juego (`gameinfo.albiononline.com
    - Linux: `CTAChecker-linux`.
    No hace falta instalar nada.
 2. **Lista del bot**: pega el mensaje de anotados (todas las partys que haya).
+   Opcional: en «Lista de miembros del gremio» pega la lista de miembros
+   exportada del juego ("Character Name", "Last Seen", "Roles") para ver quién
+   estaba conectado y no fue (ver «Conectados que no fueron» abajo).
 3. **Batalla**: los killboards del gremio aparecen solos (los 50 más recientes).
    Filtra por mínimo de jugadores (30 por defecto) o del gremio, y usa
    «Cargar más antiguas» para seguir hacia atrás de a 50: los killboards a veces
@@ -32,6 +35,23 @@ No usa albionbb: lee la misma API pública del juego (`gameinfo.albiononline.com
 | ❓ Arma sin mapear | El nombre del bot no está en la pestaña Armas. |
 | 👻 No participó | No aparece en los killboards marcados (o se anotó con otro nombre). |
 | 👀 GENTE NO REGISTRADA | Jugadores del gremio que estuvieron en la batalla pero no estaban en la lista. |
+| 🚫 Conectados que no fueron | Miembros de la lista del juego que no aparecen en ningún killboard marcado. |
+
+### Conectados que no fueron
+
+"Last Seen" es la última desconexión, en hora UTC. Según eso, cada miembro que
+no aparece en los killboards cae en uno de tres grupos:
+
+- **Se desconectó durante la CTA**: su última desconexión cae entre el inicio y
+  el fin de los killboards marcados. Es la prueba más fuerte de que estaba
+  conectado y no fue.
+- **Online al exportar la lista**: solo es fiable si la exportaste durante o
+  justo después de la CTA; si no, pudo entrar cuando ya había terminado.
+- **Se desconectó después de la CTA**: estuvo conectado en algún momento
+  posterior al inicio, pero pudo entrar tarde.
+
+Quien se desconectó antes de que empezara no aparece. Quien fue pero no estuvo
+en ninguna kill tampoco sale en el killboard, así que revisa antes de sancionar.
 
 ## De dónde salen los datos
 
