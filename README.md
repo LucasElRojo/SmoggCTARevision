@@ -23,6 +23,44 @@ No usa albionbb: lee la misma API pública del juego (`gameinfo.albiononline.com
 4. **Revisar armas**: muestra, por puesto, qué arma usó cada uno.
 5. **Mensaje para Discord**: copia el texto (se parte en mensajes de menos de
    2.000 caracteres si hace falta).
+6. **Guardar en el historial**: pon la fecha y la hora UTC de la CTA (la app
+   sugiere la más cercana entre 22:00, 00:00, 02:00 y 04:00, pero tú decides) y
+   pulsa «Guardar CTA». Si ya había una CTA con esa fecha y hora, se reemplaza.
+
+## Asistencia
+
+La pestaña **Asistencia** ocupa toda la pantalla: una fila por jugador y una
+columna por CTA guardada (fecha, hora UTC y cuántos fueron). Cada celda muestra
+el arma que llevó, con el borde según cómo le fue:
+
+| Celda | Qué significa |
+|---|---|
+| Borde verde | Fue con el arma anotada. |
+| Borde rojo | Fue con otra arma. |
+| Borde amarillo | Fue, pero no se le vio el equipo o hay que revisarlo. |
+| Borde azul | Fue sin anotarse. |
+| ✗ | Se anotó y no fue. |
+| 🚫 | Estaba conectado y no fue (si se pegó la lista de miembros al revisar). |
+| · | No se anotó ni fue. |
+| vacía | Todavía no era del gremio (o ya se había ido). |
+
+Al lado de cada jugador: % de asistencia, veces que fue, veces que se anotó,
+veces que se anotó y no fue, veces con arma equivocada, veces que fue sin
+anotarse, skips y su arma más usada. Arriba, la asistencia global y el promedio
+por CTA. Se puede filtrar por fechas y por hora, buscar, ordenar y exportar a
+CSV (se abre con Excel).
+
+**Miembros del gremio**: pega cada día la lista exportada del juego en la
+sección de abajo y pulsa «Actualizar miembros». Muestra quién entró y quién ya
+no está. Quien salió o fue expulsado deja de contar desde ese día y se oculta
+con «Solo miembros actuales», pero su historial se conserva. La asistencia de
+cada jugador se cuenta desde el primer día en que aparece (en una lista o en
+una CTA) hasta la última lista que lo incluía.
+
+El historial se guarda en `cta-checker-history.json`, junto al programa. Antes
+de cada guardado se copia la versión anterior en `backups/` (se guardan las 100
+últimas). Copia ese archivo junto con el `.exe` para llevarte el historial a
+otra PC.
 
 ## Estados
 

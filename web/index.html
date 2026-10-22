@@ -11,6 +11,7 @@
   <h1>CTA Checker</h1>
   <nav>
     <button class="tab active" data-tab="check">Revisar CTA</button>
+    <button class="tab" data-tab="attendance">Asistencia</button>
     <button class="tab" data-tab="weapons">Armas</button>
     <button class="tab" data-tab="players">Jugadores</button>
   </nav>
@@ -74,6 +75,57 @@
     </div>
     <div id="discord"></div>
   </div>
+
+  <div class="step" id="save-step" hidden>
+    <h2><span class="num">5</span> Guardar en el historial de asistencia</h2>
+    <p class="hint">Pon la fecha y la hora UTC de la CTA. Si ya hay una CTA guardada con esa fecha y hora, se reemplaza.</p>
+    <div class="row">
+      <label>Fecha (UTC) <input id="save-date" type="date"></label>
+      <label>Hora UTC <input id="save-hour" list="cta-hours" size="6" placeholder="22:00"></label>
+      <datalist id="cta-hours"><option value="22:00"><option value="00:00"><option value="02:00"><option value="04:00"></datalist>
+      <button id="save-cta" class="primary">Guardar CTA</button>
+      <span id="save-status" class="hint"></span>
+    </div>
+  </div>
+</section>
+
+<section id="tab-attendance" class="tab-panel" hidden>
+  <div class="row attendance-controls">
+    <label>Desde <input id="att-from" type="date"></label>
+    <label>Hasta <input id="att-to" type="date"></label>
+    <label>Hora
+      <select id="att-hour"><option value="">Todas</option><option>22:00</option><option>00:00</option><option>02:00</option><option>04:00</option></select>
+    </label>
+    <label><input type="checkbox" id="att-members" checked> Solo miembros actuales</label>
+    <label>Buscar <input id="att-search" size="14"></label>
+    <label>Ordenar por
+      <select id="att-sort">
+        <option value="rate">Asistencia</option>
+        <option value="attended">Veces que fue</option>
+        <option value="noshow">Anotó y no fue</option>
+        <option value="wrong">Arma equivocada</option>
+        <option value="unsigned">Fue sin anotarse</option>
+        <option value="name">Nombre</option>
+      </select>
+    </label>
+    <button id="att-csv" class="secondary">Exportar CSV</button>
+  </div>
+  <div id="att-summary" class="counts"></div>
+  <div id="att-legend" class="hint"></div>
+  <div class="att-scroll"><table id="att-table" class="att-table"></table></div>
+
+  <h2>CTAs guardadas</h2>
+  <div id="att-ctas"></div>
+
+  <h2>Miembros del gremio</h2>
+  <p class="hint">Pega cada día la lista de miembros exportada del juego. Quien ya no esté en la lista se considera fuera del gremio (se oculta con «Solo miembros actuales», pero su historial se conserva). La asistencia de cada jugador se calcula desde el primer día en que aparece en una lista o en una CTA.</p>
+  <textarea id="roster-input" rows="5" placeholder="&quot;Character Name&quot; &quot;Last Seen&quot; &quot;Roles&quot;"></textarea>
+  <div class="row">
+    <label>Fecha de la lista <input id="roster-date" type="date"></label>
+    <button id="roster-save" class="primary">Actualizar miembros</button>
+    <span id="roster-status" class="hint"></span>
+  </div>
+  <div id="roster-info"></div>
 </section>
 
 <section id="tab-weapons" class="tab-panel" hidden>
@@ -101,5 +153,6 @@
 </main>
 
 <script src="app.js"></script>
+<script src="history.js"></script>
 </body>
 </html>

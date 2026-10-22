@@ -1,2 +1,4 @@
 dist/
 cta-checker-config.json
+cta-checker-history.json
+backups/

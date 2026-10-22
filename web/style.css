@@ -52,3 +52,29 @@ tbody tr.battle.selected { background: rgba(91, 141, 239, .15); }
 .chunk textarea { min-height: 160px; }
 .error { color: var(--bad); }
 code { background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+
+/* Attendance: the whole page width, one column per CTA. */
+main.wide { max-width: none; }
+.attendance-controls { position: sticky; top: 0; z-index: 3; background: var(--bg); padding: 8px 0; }
+.att-scroll { overflow: auto; max-height: calc(100vh - 220px); border: 1px solid var(--line); border-radius: 8px; }
+.att-table { margin: 0; font-size: 13px; }
+.att-table th, .att-table td { white-space: nowrap; padding: 4px 6px; }
+.att-table thead th { position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.att-table .sticky { position: sticky; left: 0; z-index: 1; background: var(--panel); }
+.att-table thead .sticky { z-index: 3; }
+.att-table th.cta { text-align: center; font-size: 11px; line-height: 1.2; }
+.att-table td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.att-table tr.left td { opacity: .55; }
+.cell { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 6px; border: 2px solid transparent; }
+.cell img { width: 26px; height: 26px; }
+.c-ok { border-color: var(--ok); }
+.c-wrong { border-color: var(--bad); background: rgba(229, 83, 75, .15); }
+.c-noeq, .c-check, .c-unmapped { border-color: var(--warn); }
+.c-unsigned { border-color: var(--accent); }
+.c-noshow { color: var(--bad); font-weight: 700; }
+.c-skip { color: var(--warn); }
+.rate { display: inline-block; min-width: 44px; text-align: right; font-weight: 600; }
+.bar { display: inline-block; width: 60px; height: 6px; background: var(--line); border-radius: 3px; margin-left: 6px; vertical-align: middle; }
+.bar i { display: block; height: 100%; border-radius: 3px; background: var(--ok); }
+.legend-item { margin-right: 14px; display: inline-flex; align-items: center; gap: 4px; }
+.legend-item .cell { width: 18px; height: 18px; }

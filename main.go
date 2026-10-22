@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 )
@@ -41,7 +42,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(static)))
 	mux.HandleFunc("/api/gi/", proxy)
-	mux.HandleFunc("/api/config", configHandler)
+	mux.HandleFunc("/api/config", jsonFileHandler("cta-checker-config.json", false))
+	mux.HandleFunc("/api/history", jsonFileHandler("cta-checker-history.json", true))
 
 	listener, err := net.Listen("tcp", "127.0.0.1:8765")
 	if err != nil {
@@ -102,42 +104,78 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "la API de Albion no respondió: "+lastErr, http.StatusBadGateway)
 }
 
-var configMu sync.Mutex
+var filesMu sync.Mutex
 
-// configPath keeps the user's aliases beside the executable, so they travel
-// with it to another PC.
-func configPath() string {
+// dataPath keeps the user's files beside the executable, so they travel with
+// it to another PC.
+func dataPath(name string) string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "cta-checker-config.json"
+		return name
 	}
-	return filepath.Join(filepath.Dir(exe), "cta-checker-config.json")
+	return filepath.Join(filepath.Dir(exe), name)
 }
 
-func configHandler(w http.ResponseWriter, r *http.Request) {
-	configMu.Lock()
-	defer configMu.Unlock()
-	switch r.Method {
-	case http.MethodGet:
-		data, err := os.ReadFile(configPath())
-		if err != nil {
-			data = []byte("{}")
+// jsonFileHandler serves one JSON file: GET reads it ({} when missing), POST
+// replaces it. With backup, the previous version is first copied to
+// backups/<name>-<timestamp>.json: the attendance history is the guild's
+// record and a bad save must never lose it.
+func jsonFileHandler(name string, backup bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		filesMu.Lock()
+		defer filesMu.Unlock()
+		path := dataPath(name)
+		switch r.Method {
+		case http.MethodGet:
+			data, err := os.ReadFile(path)
+			if err != nil {
+				data = []byte("{}")
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(data)
+		case http.MethodPost:
+			body, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+			if err != nil || !json.Valid(body) {
+				http.Error(w, "JSON inválido", http.StatusBadRequest)
+				return
+			}
+			if backup {
+				if old, err := os.ReadFile(path); err == nil {
+					dir := dataPath("backups")
+					os.MkdirAll(dir, 0o755)
+					stamp := time.Now().Format("20060102-150405")
+					base := name[:len(name)-len(filepath.Ext(name))]
+					if err := os.WriteFile(filepath.Join(dir, base+"-"+stamp+".json"), old, 0o644); err != nil {
+						http.Error(w, "no pude respaldar: "+err.Error(), http.StatusInternalServerError)
+						return
+					}
+					pruneBackups(dir, base+"-", 100)
+				}
+			}
+			tmp := path + ".tmp"
+			if err := os.WriteFile(tmp, body, 0o644); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if err := os.Rename(tmp, path); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, "método no permitido", http.StatusMethodNotAllowed)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
-	case http.MethodPost:
-		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-		if err != nil || !json.Valid(body) {
-			http.Error(w, "JSON inválido", http.StatusBadRequest)
-			return
-		}
-		if err := os.WriteFile(configPath(), body, 0o644); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		http.Error(w, "método no permitido", http.StatusMethodNotAllowed)
+	}
+}
+
+// pruneBackups keeps the newest `keep` automatic copies; their timestamped
+// names sort chronologically.
+func pruneBackups(dir, prefix string, keep int) {
+	matches, _ := filepath.Glob(filepath.Join(dir, prefix+"*.json"))
+	sort.Strings(matches)
+	for len(matches) > keep {
+		os.Remove(matches[0])
+		matches = matches[1:]
 	}
 }
 

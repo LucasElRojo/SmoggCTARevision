@@ -496,6 +496,7 @@ function renderResults() {
     ${skippers ? skippersHtml(skippers) : ""}`;
   $("discord-step").hidden = false;
   renderDiscord();
+  showSaveStep();
 }
 
 function skippersHtml(skippers) {
