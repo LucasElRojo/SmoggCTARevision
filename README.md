@@ -43,8 +43,8 @@ No usa albionbb: lee la misma API pública del juego (`gameinfo.albiononline.com
 ## Pestañas Armas y Jugadores
 
 - **Armas**: a qué arma del juego corresponde cada nombre del bot ("Golem",
-  "SoB", "GA"…). Revisa "Golem" (se dedujo de que el caller llevaba Mace),
-  "Galas" (puesto como Galatine Pair) y "Cobra" (sin mapear).
+  "SoB", "GA"…). Vienen cargados los apodos del gremio; por ejemplo Golem es
+  Earthrune Staff, Cobra es Stillgaze Staff y Galas es Galatine Pair.
 - **Jugadores**: para quien se anota en Discord con un nombre distinto al del
   personaje. Si la app encuentra un nombre parecido, muestra «¿Nombre?» y el
   botón Confirmar lo guarda aquí.

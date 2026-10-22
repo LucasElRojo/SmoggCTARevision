@@ -1,10 +1,10 @@
 "use strict";
 
 // Bot weapon name -> base item IDs (tier and enchantment stripped). Keys are
-// normalised with norm(). "Golem" is inferred from what the caller carried
-// (a one-handed Mace); "Galas" and "Cobra" are unverified: check them in Armas.
+// normalised with norm(); the guild's nicknames were confirmed by the user.
 const DEFAULT_WEAPONS = {
-  "Golem": ["MAIN_MACE"],
+  "Golem": ["2H_SHAPESHIFTER_KEEPER"],
+  "Cobra": ["2H_SHAPESHIFTER_CRYSTAL"],
   "Heavy Mace": ["2H_MACE"],
   "Monarch": ["MAIN_MACE_CRYSTAL"],
   "Camlann": ["2H_MACE_MORGANA"],
