@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTA Checker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>CTA Checker</h1>
+  <nav>
+    <button class="tab active" data-tab="check">Revisar CTA</button>
+    <button class="tab" data-tab="weapons">Armas</button>
+    <button class="tab" data-tab="players">Jugadores</button>
+  </nav>
+  <div class="settings">
+    <label>Gremio <input id="guild" value="Smogg" size="12"></label>
+    <label>Servidor
+      <select id="region">
+        <option value="west">West (Américas)</option>
+        <option value="east">East (Asia)</option>
+        <option value="europe">Europe</option>
+      </select>
+    </label>
+  </div>
+</header>
+
+<main>
+<section id="tab-check" class="tab-panel">
+  <div class="step">
+    <h2><span class="num">1</span> Lista del bot</h2>
+    <p class="hint">Pega el mensaje de anotados tal como sale en Discord (pueden ser varias partys).</p>
+    <textarea id="list" rows="10" placeholder="PARTY 1 · posiciones 1–20&#10;1. 👑 Golem — @Daitza 🔒&#10;..."></textarea>
+    <div id="list-summary" class="hint"></div>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">2</span> Batalla</h2>
+    <p class="hint">Los killboards del gremio se cargan solos. Un mismo timer puede quedar partido en varios: marca todos los que correspondan; cada personaje cuenta una sola vez aunque salga en varios.</p>
+    <div class="row">
+      <label>Mínimo de jugadores <input id="min-players" type="number" min="0" value="30" style="width:70px"></label>
+      <label>Mínimo del gremio <input id="min-guild" type="number" min="0" value="0" style="width:70px"></label>
+      <button id="load-battles" class="secondary">Actualizar</button>
+      <button id="more-battles" class="secondary" hidden>Cargar más antiguas (50)</button>
+      <input id="manual-ids" placeholder="o pega IDs / links de batallas, separados por coma" size="40">
+    </div>
+    <div id="battle-status" class="hint"></div>
+    <div id="battles"></div>
+  </div>
+
+  <div class="step">
+    <h2><span class="num">3</span> Revisión</h2>
+    <div class="row">
+      <button id="analyze" class="primary">Revisar armas</button>
+      <span id="progress" class="hint"></span>
+    </div>
+    <div id="results"></div>
+  </div>
+
+  <div class="step" id="discord-step" hidden>
+    <h2><span class="num">4</span> Mensaje para Discord</h2>
+    <div class="row">
+      <label><input type="checkbox" id="opt-ok"> Incluir los correctos</label>
+      <label><input type="checkbox" id="opt-extra" checked> Incluir GENTE NO REGISTRADA</label>
+      <label><input type="checkbox" id="opt-tier"> Mostrar tier del arma</label>
+    </div>
+    <div id="discord"></div>
+  </div>
+</section>
+
+<section id="tab-weapons" class="tab-panel" hidden>
+  <h2>Armas del bot → armas del juego</h2>
+  <p class="hint">Cada nombre que usa el bot apunta a una o más armas del juego. Escribe el nombre en inglés del arma (con autocompletado) o su ID, separados por coma. Lo que cambies se guarda en <code>cta-checker-config.json</code>, junto al programa. <code>@battlemount</code> acepta cualquier montura de batalla.</p>
+  <table id="weapons-table"></table>
+  <div class="row">
+    <input id="new-alias" placeholder="Nombre en el bot (ej. Cobra)">
+    <input id="new-alias-items" list="item-names" placeholder="Arma del juego" size="36">
+    <button id="add-alias">Agregar</button>
+  </div>
+  <datalist id="item-names"></datalist>
+</section>
+
+<section id="tab-players" class="tab-panel" hidden>
+  <h2>Nombre en Discord → nombre en el juego</h2>
+  <p class="hint">Para quien se anota con un nombre distinto al de su personaje. Al confirmar un nombre parecido en la revisión se agrega aquí.</p>
+  <table id="players-table"></table>
+  <div class="row">
+    <input id="new-discord" placeholder="Nombre en Discord">
+    <input id="new-ingame" placeholder="Nombre en el juego">
+    <button id="add-player">Agregar</button>
+  </div>
+</section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
