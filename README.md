@@ -25,7 +25,36 @@ No usa albionbb: lee la misma API pública del juego (`gameinfo.albiononline.com
    2.000 caracteres si hace falta).
 6. **Guardar en el historial**: pon la fecha y la hora UTC de la CTA (la app
    sugiere la más cercana entre 22:00, 00:00, 02:00 y 04:00, pero tú decides) y
-   pulsa «Guardar CTA». Si ya había una CTA con esa fecha y hora, se reemplaza.
+   pulsa «Registrar», o «No registrar» si no quieres guardarla. Si ya había una
+   CTA con esa fecha y hora, pregunta antes de reemplazarla.
+
+### Pre-registro sin killboard
+
+Los killboards pueden tardar días en aparecer. Si pulsas «Revisar» sin marcar
+ningún killboard, la app hace un **pre-registro** con la lista del bot y la
+lista de miembros:
+
+- Anotados que están online y anotados que no aparecen online.
+- 🚫 **Conectados sin anotarse**: miembros online que no están en la lista del
+  bot (para ver quién está skipeando).
+- El mensaje para Discord con todo eso.
+
+Al registrarlo, la app avisa «Estás registrando sin el killboard, ¿estás
+seguro?» (Sí / No). Se guarda marcado con ⏳: no cuenta para el % de asistencia
+de los anotados (todavía no se sabe si fueron), pero sí registra a los
+conectados sin anotarse y a las bombs. Cuando aparezca el killboard, revisa de
+nuevo con la misma lista y regístralo con la misma fecha y hora para
+reemplazarlo.
+
+### Bombs y otras partys
+
+Quien juega la CTA en una bomb u otra party no se anota en el bot. Márcalo con
+los botones **💣 Bomb** o **🎯 Otra party** junto a su nombre (en los
+anotados que no aparecen, en «Gente no registrada» o en «Conectados»), o
+escribe los nombres en «Bombs y otras partys» mirando las fotos de las partys.
+Cuentan como presentes, salen aparte en el mensaje de Discord y en la
+asistencia. Las marcas se mantienen hasta que pulses «Limpiar marcas», así que
+sirven para el pre-registro y para la revisión posterior con el killboard.
 
 ## Asistencia
 
@@ -39,6 +68,8 @@ el arma que llevó, con el borde según cómo le fue:
 | Borde rojo | Fue con otra arma. |
 | Borde amarillo | Fue, pero no se le vio el equipo o hay que revisarlo. |
 | Borde azul | Fue sin anotarse. |
+| Borde morado | Fue en una bomb u otra party. |
+| ⏳ | Pre-registro: se anotó, pero aún no hay killboard (no cuenta para el %). |
 | ✗ | Se anotó y no fue. |
 | 🚫 | Estaba conectado y no fue (si se pegó la lista de miembros al revisar). |
 | · | No se anotó ni fue. |

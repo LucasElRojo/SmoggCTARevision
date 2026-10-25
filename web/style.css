@@ -78,3 +78,13 @@ main.wide { max-width: none; }
 .bar i { display: block; height: 100%; border-radius: 3px; background: var(--ok); }
 .legend-item { margin-right: 14px; display: inline-flex; align-items: center; gap: 4px; }
 .legend-item .cell { width: 18px; height: 18px; }
+
+/* Pre-registration, bombs and the yes / no dialog. */
+.s-pending { background: rgba(91, 141, 239, .15); color: var(--accent); }
+.s-bomb, .s-party { background: rgba(163, 113, 247, .18); color: #b58cf8; }
+.c-bomb, .c-party { border-color: #a371f7; }
+.c-pending { color: var(--accent); }
+.banner { background: rgba(91, 141, 239, .12); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 12px; }
+dialog { overflow: hidden; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; max-width: 460px; }
+dialog::backdrop { background: rgba(0, 0, 0, .6); }
+.dialog-buttons { justify-content: flex-end; }

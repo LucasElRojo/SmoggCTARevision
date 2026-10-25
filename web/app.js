@@ -48,6 +48,9 @@ const STATUS = {
   noeq: { label: "Sin equipo visible", icon: "⚠️" },
   unmapped: { label: "Arma sin mapear", icon: "❓" },
   absent: { label: "No participó", icon: "👻" },
+  pending: { label: "Sin killboard", icon: "⏳" },
+  bomb: { label: "Bomb", icon: "💣" },
+  party: { label: "Otra party", icon: "🎯" },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -402,36 +405,110 @@ function judge(entry, found) {
   return { status: "ok", expected, used, note: others.length ? "también usó " + others.map(weaponName).join(", ") : "" };
 }
 
+// ---------- bombs and other parties ----------
+
+// Players who fought outside the bot's parties (bombs, another party). They do
+// not sign up; officers mark them by hand from screenshots and they count as
+// present. Marks stay until "Limpiar marcas", so a pre-registration and the
+// later check with the killboard share them.
+const TAGS = {
+  bomb: { label: "Bomb", icon: "💣" },
+  party: { label: "Otra party", icon: "🎯" },
+};
+let tags = new Map(); // norm(name) -> { name, tag }
+
+function loadTags() {
+  try { tags = new Map(JSON.parse(localStorage.getItem("cta-tags") || "[]").map((t) => [norm(t.name), t])); } catch { tags = new Map(); }
+}
+
+function saveTags() {
+  try { localStorage.setItem("cta-tags", JSON.stringify([...tags.values()])); } catch {}
+}
+
+// Clicking the active mark again removes it.
+function setTag(name, tag) {
+  const key = norm(name);
+  if (!tag || tags.get(key)?.tag === tag) tags.delete(key);
+  else tags.set(key, { name, tag });
+  saveTags();
+}
+
+const tagOf = (name) => tags.get(norm(name))?.tag || null;
+
+function tagButtons(name) {
+  const current = tagOf(name);
+  return Object.entries(TAGS).map(([tag, t]) =>
+    `<button class="small ${current === tag ? "primary" : "secondary"}" data-tag="${tag}" data-name="${esc(name)}" title="${current === tag ? "Quitar marca" : "Marcar como " + t.label}">${t.icon} ${t.label}</button>`).join(" ");
+}
+
+function aliasFor(discord) {
+  const alias = Object.entries(config.players).find(([k]) => norm(k) === norm(discord));
+  return alias ? alias[1] : discord;
+}
+
+const rowName = (r) => r.found?.player.name || aliasFor(r.discord);
+
+// A signed-up player missing from the killboard (or checked without one) who
+// was marked as bomb / other party played after all.
+function rowStatus(r) {
+  const tag = tagOf(rowName(r));
+  return tag && (r.status === "absent" || r.status === "pending") ? tag : r.status;
+}
+
+// ---------- analysis ----------
+
+function matchRows(rows, players) {
+  const taken = new Set();
+  // Exact names first, so a fuzzy guess never takes someone else's player.
+  for (const r of rows) {
+    const exact = findPlayer(r.discord, players, new Set());
+    if (exact && !exact.guess) { r.found = exact; taken.add(norm(exact.player.name)); }
+  }
+  for (const r of rows) {
+    if (r.found) continue;
+    r.found = findPlayer(r.discord, players, taken);
+    if (r.found) taken.add(norm(r.found.player.name));
+  }
+  return taken;
+}
+
+// Without a killboard nobody can be proven present: the check only says who
+// signed up, who is connected and who is connected without signing up.
+function onlineUnsigned(members, rows) {
+  const signed = new Set(rows.filter((r) => r.found).map((r) => norm(r.found.player.name)));
+  return members.filter((m) => m.online && !signed.has(norm(m.name)))
+    .map((m) => ({ ...m, when: "online", signed: null }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 async function analyze() {
   const ids = selectedIds();
   const { title, entries } = parseList($("list").value);
   const signed = entries.filter((e) => e.discord);
   const members = parseMembers($("members").value);
   if (!signed.length && !members.length) return showError("Pega la lista del bot o la lista de miembros.");
-  if (!ids.length) return showError("Marca al menos una batalla (o pega su ID).");
   $("analyze").disabled = true;
   try {
     const guild = await resolveGuild();
     const fetched = [];
     for (const id of ids) fetched.push(await fetchBattle(id, (msg) => ($("progress").textContent = msg)));
-    const players = collectPlayers(fetched, guild);
-    const taken = new Set();
-    // Exact names first, so a fuzzy guess never takes someone else's player.
-    const rows = signed.map((e) => ({ ...e }));
-    for (const r of rows) {
-      const exact = findPlayer(r.discord, players, new Set());
-      if (exact && !exact.guess) { r.found = exact; taken.add(norm(exact.player.name)); }
-    }
-    for (const r of rows) {
-      if (r.found) continue;
-      r.found = findPlayer(r.discord, players, taken);
-      if (r.found) taken.add(norm(r.found.player.name));
-    }
-    for (const r of rows) Object.assign(r, judge(r, r.found));
-    const extras = [...players.entries()].filter(([k]) => !taken.has(k)).map(([, p]) => p);
+    const provisional = !fetched.length;
     const battleList = fetched.map((f) => f.battle);
-    const skippers = members.length ? findSkippers(members, players, battleList, rows) : null;
-    lastResult = { title, rows, extras, skippers, battles: battleList, guild };
+    const rows = signed.map((e) => ({ ...e }));
+    let extras = [], skippers = null;
+    if (provisional) {
+      const roster = new Map(members.map((m) => [norm(m.name), { name: m.name, member: m }]));
+      matchRows(rows, roster);
+      for (const r of rows) Object.assign(r, { status: "pending", member: r.found?.player.member || null });
+      if (members.length) skippers = onlineUnsigned(members, rows);
+    } else {
+      const players = collectPlayers(fetched, guild);
+      const taken = matchRows(rows, players);
+      for (const r of rows) Object.assign(r, judge(r, r.found));
+      extras = [...players.entries()].filter(([k]) => !taken.has(k)).map(([, p]) => p);
+      if (members.length) skippers = findSkippers(members, players, battleList, rows);
+    }
+    lastResult = { title, rows, extras, skippers, members, battles: battleList, guild, provisional };
     $("progress").textContent = "";
     renderResults();
   } catch (err) {
@@ -459,55 +536,115 @@ function expectedHtml(ids) {
   return ids.map((id) => (id === "@battlemount" ? "montura de batalla" : esc(items[id] || id))).join(" / ");
 }
 
+function connectionText(member) {
+  if (!member) return "no está en la lista de miembros";
+  if (member.online) return "online";
+  return member.lastSeen ? `desconectado (visto ${fmtTime(member.lastSeen)})` : "desconectado";
+}
+
+// Tags change after the check, so the lists they move people out of are
+// derived here instead of stored.
+function view() {
+  const { rows, extras, skippers } = lastResult;
+  const inRows = new Set(rows.map((r) => norm(rowName(r))));
+  const extrasByKey = new Map(extras.map((p) => [norm(p.name), p]));
+  const membersByKey = new Map((lastResult.members || []).map((m) => [norm(m.name), m]));
+  const tagged = [...tags.values()].map((t) => ({
+    ...t,
+    row: rows.find((r) => norm(rowName(r)) === norm(t.name)) || null,
+    fought: extrasByKey.get(norm(t.name)) || null,
+    member: membersByKey.get(norm(t.name)) || null,
+  })).sort((a, b) => a.tag.localeCompare(b.tag) || a.name.localeCompare(b.name));
+  return {
+    tagged,
+    extrasFree: extras.filter((p) => !tagOf(p.name)),
+    skippersFree: skippers ? skippers.filter((m) => !tagOf(m.name) && !(m.signed && inRows.has(norm(m.name)) && tagOf(rowName(m.signed)))) : null,
+  };
+}
+
 function renderResults() {
-  const { rows, extras, skippers, battles: fetched, guild } = lastResult;
+  const { rows, battles: fetched, guild, provisional } = lastResult;
+  const { tagged, extrasFree, skippersFree } = view();
   const counts = {};
-  for (const r of rows) counts[r.status] = (counts[r.status] || 0) + 1;
+  for (const r of rows) { const s = rowStatus(r); counts[s] = (counts[s] || 0) + 1; }
   let party = null;
   const body = rows.map((r) => {
+    const status = rowStatus(r);
     let head = "";
-    if (r.party !== party) { party = r.party; head = `<tr class="party"><td colspan="6">${esc(party || "Lista")}</td></tr>`; }
+    if (r.party !== party) { party = r.party; head = `<tr class="party"><td colspan="7">${esc(party || "Lista")}</td></tr>`; }
     const p = r.found?.player;
     const nameCell = !p ? `<span class="muted">—</span>`
       : r.found.guess ? `¿${esc(p.name)}? <button class="small" data-confirm="${esc(r.discord)}" data-name="${esc(p.name)}">Confirmar</button>`
       : esc(p.name);
-    const multi = p && fetched.length > 1 ? ` <span class="muted">(${p.battles.size}/${fetched.length} kb)</span>` : "";
-    const usedCell = r.status === "absent" ? "" : [
-      ...(r.used || []).map(weaponHtml),
-      ...((r.mounts || []).length ? [`<span class="muted">montura: ${r.mounts.map((m) => esc(items[m.base] || m.base)).join(", ")}</span>`] : []),
-    ].join("") + (r.note ? ` <span class="muted">(${esc(r.note)})</span>` : "");
-    return head + `<tr data-status="${r.status}">
-      <td>${r.pos}</td><td>${esc(r.weapon)}<div class="muted">${expectedHtml(r.expected)}</div></td>
+    const multi = p?.battles && fetched.length > 1 ? ` <span class="muted">(${p.battles.size}/${fetched.length} kb)</span>` : "";
+    const usedCell = provisional
+      ? `<span class="${r.member?.online ? "" : "muted"}">${r.member?.online ? "🟢 " : ""}${esc(connectionText(r.member))}</span>`
+      : r.status === "absent" ? "" : [
+        ...(r.used || []).map(weaponHtml),
+        ...((r.mounts || []).length ? [`<span class="muted">montura: ${r.mounts.map((m) => esc(items[m.base] || m.base)).join(", ")}</span>`] : []),
+      ].join("") + (r.note ? ` <span class="muted">(${esc(r.note)})</span>` : "");
+    const markCell = r.status === "absent" || r.status === "pending" ? tagButtons(rowName(r)) : "";
+    return head + `<tr data-status="${status}">
+      <td>${r.pos}</td><td>${esc(r.weapon)}<div class="muted">${expectedHtml(r.expected || expectedFor(r.weapon))}</div></td>
       <td>${esc(r.discord)}</td><td>${nameCell}${multi}</td><td>${usedCell}</td>
-      <td><span class="status s-${r.status}">${STATUS[r.status].icon} ${STATUS[r.status].label}</span></td></tr>`;
+      <td><span class="status s-${status}">${STATUS[status].icon} ${STATUS[status].label}</span></td><td>${markCell}</td></tr>`;
   }).join("");
 
-  const extraRows = extras.sort((a, b) => a.name.localeCompare(b.name)).map((p) =>
-    `<tr><td>${esc(p.name)}</td><td>${[...p.weapons.values()].map(weaponHtml).join("") || '<span class="muted">sin equipo visible</span>'}</td><td>${p.kills} / ${p.deaths}</td></tr>`).join("");
+  const extraRows = extrasFree.sort((a, b) => a.name.localeCompare(b.name)).map((p) =>
+    `<tr><td>${esc(p.name)}</td><td>${[...p.weapons.values()].map(weaponHtml).join("") || '<span class="muted">sin equipo visible</span>'}</td><td>${p.kills} / ${p.deaths}</td><td>${tagButtons(p.name)}</td></tr>`).join("");
 
-  $("results").innerHTML = `
-    <p class="muted">Batalla(s): ${fetched.map((b) => `${b.id} (${fmtTime(b.startTime)})`).join(", ")} · ${esc(guild.Name)}</p>
-    <div class="counts">${Object.keys(STATUS).filter((s) => counts[s]).map((s) => `<div>${STATUS[s].icon} ${STATUS[s].label}: <span>${counts[s]}</span></div>`).join("")}</div>
-    <div class="filters">Mostrar: ${Object.keys(STATUS).map((s) => `<label><input type="checkbox" data-filter="${s}" checked> ${STATUS[s].label}</label>`).join("")}</div>
-    <table><thead><tr><th>#</th><th>Arma anotada</th><th>Discord</th><th>En el juego</th><th>Usó en la batalla</th><th>Estado</th></tr></thead>
-    <tbody id="result-body">${body}</tbody></table>
-    ${extras.length ? `<h2>👀 GENTE NO REGISTRADA (${extras.length})</h2><p class="hint">Jugadores del gremio que estuvieron en la batalla pero no aparecen en la lista del bot.</p>
-      <table><thead><tr><th>Jugador</th><th>Usó</th><th>K / D</th></tr></thead><tbody>${extraRows}</tbody></table>` : ""}
-    ${skippers ? skippersHtml(skippers) : ""}`;
+  const banner = provisional
+    ? `<p class="banner">⏳ <b>Pre-registro sin killboard.</b> Todavía no se puede saber quién fue ni con qué arma: solo quién se anotó, quién está conectado y quién está conectado sin anotarse. Cuando aparezca el killboard, revisa de nuevo y guarda con la misma fecha y hora para reemplazarlo.</p>`
+    : `<p class="muted">Batalla(s): ${fetched.map((b) => `${b.id} (${fmtTime(b.startTime)})`).join(", ")} · ${esc(guild.Name)}</p>`;
+
+  $("results").innerHTML = `${banner}
+    ${rows.length ? `<div class="counts">${Object.keys(STATUS).filter((s) => counts[s]).map((s) => `<div>${STATUS[s].icon} ${STATUS[s].label}: <span>${counts[s]}</span></div>`).join("")}</div>
+    <div class="filters">Mostrar: ${Object.keys(STATUS).filter((s) => counts[s]).map((s) => `<label><input type="checkbox" data-filter="${s}" checked> ${STATUS[s].label}</label>`).join("")}</div>
+    <table><thead><tr><th>#</th><th>Arma anotada</th><th>Discord</th><th>En el juego</th><th>${provisional ? "Conexión" : "Usó en la batalla"}</th><th>Estado</th><th>Marcar</th></tr></thead>
+    <tbody id="result-body">${body}</tbody></table>` : ""}
+    ${skippersFree ? skippersHtml(skippersFree, provisional) : ""}
+    ${taggedHtml(tagged)}
+    ${extrasFree.length ? `<h2>👀 GENTE NO REGISTRADA (${extrasFree.length})</h2><p class="hint">Jugadores del gremio que estuvieron en la batalla pero no aparecen en la lista del bot. Si iban en una bomb u otra party, márcalos.</p>
+      <table><thead><tr><th>Jugador</th><th>Usó</th><th>K / D</th><th>Marcar</th></tr></thead><tbody>${extraRows}</tbody></table>` : ""}`;
   $("discord-step").hidden = false;
   renderDiscord();
   showSaveStep();
 }
 
-function skippersHtml(skippers) {
+function skippersHtml(skippers, provisional) {
   const body = skippers.map((m) => `<tr>
     <td>${esc(m.name)}</td>
-    <td>${esc(SKIP_LABEL[m.when])}${m.lastSeen ? ` <span class="muted">(${fmtTime(m.lastSeen)})</span>` : ""}</td>
+    <td>${esc(provisional ? "Online al exportar la lista" : SKIP_LABEL[m.when])}${m.lastSeen ? ` <span class="muted">(${fmtTime(m.lastSeen)})</span>` : ""}</td>
     <td>${m.signed ? `Sí, puesto ${m.signed.pos} (${esc(m.signed.weapon)})` : '<span class="muted">No</span>'}</td>
-    <td class="muted">${esc(m.roles.join(", "))}</td></tr>`).join("");
-  return `<h2>🚫 CONECTADOS QUE NO FUERON (${skippers.length})</h2>
-    <p class="hint">Miembros de la lista del juego que no aparecen en ningún killboard marcado. «Se desconectó durante la CTA» es lo más seguro. «Online al exportar» y «después de la CTA» pueden ser gente que entró cuando la CTA ya había terminado. Quien fue pero no estuvo en ninguna kill tampoco sale en el killboard.</p>
-    ${skippers.length ? `<table><thead><tr><th>Jugador</th><th>Conexión</th><th>Anotado</th><th>Roles</th></tr></thead><tbody>${body}</tbody></table>` : ""}`;
+    <td class="muted">${esc(m.roles.join(", "))}</td><td>${tagButtons(m.name)}</td></tr>`).join("");
+  const title = provisional ? `🚫 CONECTADOS SIN ANOTARSE (${skippers.length})` : `🚫 CONECTADOS QUE NO FUERON (${skippers.length})`;
+  const hint = provisional
+    ? "Miembros online en la lista exportada que no están en la lista del bot. Si van en una bomb u otra party, márcalos."
+    : "Miembros de la lista del juego que no aparecen en ningún killboard marcado. «Se desconectó durante la CTA» es lo más seguro. «Online al exportar» y «después de la CTA» pueden ser gente que entró cuando la CTA ya había terminado. Quien fue pero no estuvo en ninguna kill tampoco sale en el killboard.";
+  return `<h2>${title}</h2><p class="hint">${hint}</p>
+    ${skippers.length ? `<table><thead><tr><th>Jugador</th><th>Conexión</th><th>Anotado</th><th>Roles</th><th>Marcar</th></tr></thead><tbody>${body}</tbody></table>` : ""}`;
+}
+
+function taggedHtml(tagged) {
+  const names = new Set([...(lastResult.members || []).map((m) => m.name), ...lastResult.extras.map((p) => p.name)]);
+  const body = tagged.map((t) => {
+    const where = t.fought ? [...t.fought.weapons.values()].map(weaponHtml).join("") || "en el killboard"
+      : t.row ? `anotado en el puesto ${t.row.pos} (${esc(t.row.weapon)})`
+      : t.member ? esc(connectionText(t.member))
+      : '<span class="muted">no aparece en el killboard ni en la lista de miembros</span>';
+    return `<tr><td>${esc(t.name)}</td><td>${TAGS[t.tag].icon} ${TAGS[t.tag].label}</td><td>${where}</td>
+      <td><button class="small secondary" data-tag="${t.tag}" data-name="${esc(t.name)}">Quitar</button></td></tr>`;
+  }).join("");
+  return `<h2>💣 BOMBS Y OTRAS PARTYS (${tagged.length})</h2>
+    <p class="hint">Jugadores que fueron en otro grupo y no se anotan en el bot (cuentan como presentes). Márcalos con los botones de arriba o escribe sus nombres, separados por coma, mirando las fotos de las partys.</p>
+    <div class="row">
+      <input id="tag-names" list="tag-candidates" size="40" placeholder="Nombres en el juego, separados por coma">
+      <datalist id="tag-candidates">${[...names].sort().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
+      <button class="small" data-add-tag="bomb">💣 Agregar como Bomb</button>
+      <button class="small" data-add-tag="party">🎯 Agregar como Otra party</button>
+      ${tagged.length ? `<button class="small secondary" data-clear-tags>Limpiar marcas</button>` : ""}
+    </div>
+    ${tagged.length ? `<table><thead><tr><th>Jugador</th><th>Grupo</th><th>Visto</th><th></th></tr></thead><tbody>${body}</tbody></table>` : ""}`;
 }
 
 function usedText(r, withTier) {
@@ -517,49 +654,76 @@ function usedText(r, withTier) {
   return (r.used || []).map((w) => weaponName(w) + (withTier ? ` ${[...w.types].map(tierOf).join("/")}` : "")).join(", ");
 }
 
+function slotText() {
+  const date = $("save-date").value, hour = $("save-hour").value.trim();
+  return date ? `${date.slice(8, 10)}/${date.slice(5, 7)}${hour ? ` ${hour} UTC` : ""}` : "";
+}
+
 function discordMessage() {
-  const { title, rows, extras, skippers, battles: fetched, guild } = lastResult;
+  const { title, rows, battles: fetched, guild, provisional } = lastResult;
+  const { tagged, extrasFree, skippersFree } = view();
   const withTier = $("opt-tier").checked;
-  const who = (r) => `@${r.discord}` + (r.found?.guess || (r.found && norm(r.found.player.name) !== norm(r.discord)) ? ` (${r.found.player.name})` : "");
-  const line = (r, extra) => `\`${String(r.pos).padStart(2, " ")}\` ${r.weapon} — ${who(r)}${extra ? ` → ${extra}` : ""}`;
-  const by = (s) => rows.filter((r) => r.status === s);
-  const ok = by("ok"), wrong = by("wrong");
-  const review = rows.filter((r) => ["check", "noeq", "unmapped"].includes(r.status));
-  const absent = by("absent");
+  const who = (r) => `**@${r.discord}**` + (r.found && norm(r.found.player.name) !== norm(r.discord) ? ` (${r.found.player.name})` : "");
+  const line = (r, extra) => `- \`${String(r.pos).padStart(2, "0")}\` ${r.weapon} · ${who(r)}${extra ? ` → ${extra}` : ""}`;
+  const by = (...s) => rows.filter((r) => s.includes(rowStatus(r)));
+  const bombs = tagged.filter((t) => t.tag === "bomb"), parties = tagged.filter((t) => t.tag === "party");
+  const weaponsOf = (p) => [...p.weapons.values()].map((w) => weaponName(w) + (withTier ? ` ${[...w.types].map(tierOf).join("/")}` : "")).join(", ");
 
   const out = [];
-  out.push(`## 🔎 Revisión de armas · ${title || "CTA"} · ${guild.Name}`);
-  out.push(`Batalla${fetched.length > 1 ? "s" : ""}: ${fetched.map((b) => `\`${b.id}\` (${fmtTime(b.startTime)})`).join(", ")}`);
-  if (rows.length) out.push(`Anotados: **${rows.length}** · ✅ ${ok.length} · ❌ ${wrong.length} · ⚠️ ${review.length} · 👻 ${absent.length}`);
-  if (wrong.length) {
-    out.push("", `### ❌ Usaron otra arma (${wrong.length})`);
-    wrong.forEach((r) => out.push(line(r, `usó **${usedText(r, withTier)}**`)));
-  }
-  if (review.length) {
-    out.push("", `### ⚠️ Revisar (${review.length})`);
-    review.forEach((r) => out.push(line(r, r.status === "noeq" ? "no se vio su equipo en ninguna kill"
-      : r.status === "unmapped" ? `arma del bot sin mapear; usó ${usedText(r, withTier) || "?"}`
-      : usedText(r, withTier))));
-  }
-  if (absent.length) {
-    out.push("", `### 👻 Anotados que no participaron (${absent.length})`);
-    absent.forEach((r) => out.push(line(r)));
-  }
-  if ($("opt-ok").checked && ok.length) {
-    out.push("", `### ✅ Correctos (${ok.length})`);
-    ok.forEach((r) => out.push(line(r)));
-  }
-  if ($("opt-skip").checked && skippers?.length) {
-    out.push("", `### 🚫 Conectados que no fueron (${skippers.length})`);
-    for (const when of Object.keys(SKIP_ORDER)) {
-      const group = skippers.filter((m) => m.when === when);
-      if (group.length) out.push(`*${SKIP_LABEL[when]}:* ` + group.map((m) => m.name + (m.signed ? " (anotado)" : "")).join(", "));
+  out.push(`## 📋 ${[title || "CTA", slotText(), guild.Name].filter(Boolean).join(" · ")}`);
+  if (provisional) out.push("> ⏳ **Pre-registro**: todavía sin killboard.");
+  else out.push(`> Killboard${fetched.length > 1 ? "s" : ""}: ${fetched.map((b) => `\`${b.id}\``).join(", ")}`);
+
+  if (provisional) {
+    const offline = rows.filter((r) => rowStatus(r) === "pending" && !r.member?.online);
+    const summary = [`📝 Anotados **${rows.length}**`];
+    if (lastResult.members.length) summary.push(`🟢 Anotados online **${rows.length - offline.length}**`, `🚫 Online sin anotarse **${skippersFree?.length || 0}**`);
+    if (bombs.length) summary.push(`💣 **${bombs.length}**`);
+    if (parties.length) summary.push(`🎯 **${parties.length}**`);
+    out.push(summary.join("  ·  "));
+    if ($("opt-skip").checked && skippersFree?.length) {
+      out.push("", `### 🚫 Conectados sin anotarse (${skippersFree.length})`);
+      skippersFree.forEach((m) => out.push(`- ${m.name}`));
+    }
+    if (lastResult.members.length && offline.length) {
+      out.push("", `### ⚠️ Anotados que no aparecen online (${offline.length})`);
+      offline.forEach((r) => out.push(line(r, connectionText(r.member))));
+    }
+  } else {
+    const ok = by("ok"), wrong = by("wrong"), review = by("check", "noeq", "unmapped"), absent = by("absent");
+    const summary = [`📝 Anotados **${rows.length}**`, `✅ **${ok.length}**`, `❌ **${wrong.length}**`, `⚠️ **${review.length}**`, `👻 **${absent.length}**`];
+    if (bombs.length) summary.push(`💣 **${bombs.length}**`);
+    if (parties.length) summary.push(`🎯 **${parties.length}**`);
+    out.push(summary.join("  ·  "));
+    if (wrong.length) {
+      out.push("", `### ❌ Usaron otra arma (${wrong.length})`);
+      wrong.forEach((r) => out.push(line(r, `usó **${usedText(r, withTier)}**`)));
+    }
+    if (review.length) {
+      out.push("", `### ⚠️ Revisar (${review.length})`);
+      review.forEach((r) => out.push(line(r, rowStatus(r) === "noeq" ? "no se vio su equipo en ninguna kill"
+        : rowStatus(r) === "unmapped" ? `arma del bot sin mapear; usó ${usedText(r, withTier) || "?"}`
+        : usedText(r, withTier))));
+    }
+    if (absent.length) {
+      out.push("", `### 👻 Se anotaron y no fueron (${absent.length})`);
+      absent.forEach((r) => out.push(line(r)));
+    }
+    if ($("opt-skip").checked && skippersFree?.length) {
+      out.push("", `### 🚫 Conectados que no fueron (${skippersFree.length})`);
+      skippersFree.forEach((m) => out.push(`- ${m.name} · ${m.when === "during" ? `se desconectó ${fmtTime(m.lastSeen)}` : m.when === "online" ? "online" : `visto ${fmtTime(m.lastSeen)}`}${m.signed ? " · *anotado*" : ""}`));
+    }
+    if ($("opt-ok").checked && ok.length) {
+      out.push("", `### ✅ Correctos (${ok.length})`);
+      ok.forEach((r) => out.push(line(r)));
+    }
+    if ($("opt-extra").checked && extrasFree.length) {
+      out.push("", `### 👀 Fueron sin anotarse (${extrasFree.length})`);
+      extrasFree.forEach((p) => out.push(`- ${p.name} · ${weaponsOf(p) || "sin equipo visible"}`));
     }
   }
-  if ($("opt-extra").checked && extras.length) {
-    out.push("", `### 👀 GENTE NO REGISTRADA (${extras.length})`);
-    extras.forEach((p) => out.push(`${p.name} — ${[...p.weapons.values()].map((w) => weaponName(w) + (withTier ? ` ${[...w.types].map(tierOf).join("/")}` : "")).join(", ") || "sin equipo visible"}`));
-  }
+  if (bombs.length) out.push("", `### 💣 Bombs (${bombs.length})`, bombs.map((t) => t.name).join(", "));
+  if (parties.length) out.push("", `### 🎯 En otra party (${parties.length})`, parties.map((t) => t.name).join(", "));
   return out;
 }
 
@@ -660,6 +824,20 @@ function bind() {
     document.querySelectorAll(`#result-body tr[data-status="${filter}"]`).forEach((tr) => (tr.hidden = !e.target.checked));
   });
   $("results").addEventListener("click", async (e) => {
+    const tagBtn = e.target.closest("[data-tag]");
+    if (tagBtn) { setTag(tagBtn.dataset.name, tagBtn.dataset.tag); renderResults(); return; }
+    const addBtn = e.target.closest("[data-add-tag]");
+    if (addBtn) {
+      for (const name of $("tag-names").value.split(/[,;\n]+/).map((n) => n.trim().replace(/^@/, "")).filter(Boolean)) {
+        if (tagOf(name) !== addBtn.dataset.addTag) setTag(name, addBtn.dataset.addTag);
+      }
+      renderResults();
+      return;
+    }
+    if (e.target.closest("[data-clear-tags]")) {
+      if (await askYesNo("¿Quitar todas las marcas de Bomb y Otra party?")) { tags.clear(); saveTags(); renderResults(); }
+      return;
+    }
     const btn = e.target.closest("[data-confirm]");
     if (!btn) return;
     config.players[btn.dataset.confirm] = btn.dataset.name;
@@ -715,7 +893,18 @@ function bind() {
   });
 }
 
+// A Sí / No dialog; resolves true on Sí.
+function askYesNo(message) {
+  const dialog = $("confirm-dialog");
+  $("confirm-text").textContent = message;
+  dialog.showModal();
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "yes"), { once: true });
+  });
+}
+
 async function init() {
+  loadTags();
   items = await (await fetch("items.json")).json();
   $("item-names").innerHTML = [...new Set(Object.values(items))].sort().map((n) => `<option value="${esc(n)}">`).join("");
   await loadConfig();

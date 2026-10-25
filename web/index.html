@@ -59,7 +59,8 @@
   <div class="step">
     <h2><span class="num">3</span> Revisión</h2>
     <div class="row">
-      <button id="analyze" class="primary">Revisar armas</button>
+      <button id="analyze" class="primary">Revisar</button>
+      <span class="hint">Sin killboards marcados hace un <b>pre-registro</b>: anotados + conectados.</span>
       <span id="progress" class="hint"></span>
     </div>
     <div id="results"></div>
@@ -83,7 +84,8 @@
       <label>Fecha (UTC) <input id="save-date" type="date"></label>
       <label>Hora UTC <input id="save-hour" list="cta-hours" size="6" placeholder="22:00"></label>
       <datalist id="cta-hours"><option value="22:00"><option value="00:00"><option value="02:00"><option value="04:00"></datalist>
-      <button id="save-cta" class="primary">Guardar CTA</button>
+      <button id="save-cta" class="primary">Registrar</button>
+      <button id="skip-save" class="secondary">No registrar</button>
       <span id="save-status" class="hint"></span>
     </div>
   </div>
@@ -151,6 +153,16 @@
   </div>
 </section>
 </main>
+
+<dialog id="confirm-dialog">
+  <form method="dialog">
+    <p id="confirm-text"></p>
+    <div class="row dialog-buttons">
+      <button value="no" class="secondary">No</button>
+      <button value="yes" class="primary">Sí</button>
+    </div>
+  </form>
+</dialog>
 
 <script src="app.js"></script>
 <script src="history.js"></script>
