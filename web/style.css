@@ -88,3 +88,17 @@ main.wide { max-width: none; }
 dialog { overflow: hidden; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; max-width: 460px; }
 dialog::backdrop { background: rgba(0, 0, 0, .6); }
 .dialog-buttons { justify-content: flex-end; }
+
+/* One list of every player, with observations and marks. */
+table.players td { vertical-align: top; }
+.obs { white-space: normal; margin: 1px 0; }
+.marks { display: inline-flex; gap: 3px; white-space: nowrap; }
+.marks button { padding: 2px 6px; }
+.s-late { background: rgba(217, 163, 58, .18); color: var(--warn); }
+.s-unsigned { background: rgba(91, 141, 239, .15); color: var(--accent); }
+.s-voice { background: rgba(91, 141, 239, .15); color: var(--accent); }
+.s-skip { background: rgba(229, 83, 75, .12); color: var(--bad); }
+.c-late { border-color: var(--warn); border-style: dashed; }
+.cell.late { border-style: dashed; }
+.table-scroll { overflow-x: auto; }
+table.players td.obs-cell { min-width: 300px; }

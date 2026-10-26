@@ -66,40 +66,26 @@ function showSaveStep() {
   renderDiscord();
 }
 
-// One record per player. In a pre-registration (no killboard) a signed-up
-// player's attendance is unknown (attended: null) until the check is redone
-// with the killboard; bombs and other parties count as present either way.
+// One record per listed player (see playerList). attended is null when it is
+// unknown (a pre-registration, or only seen in the Discord channel): such
+// entries are kept but left out of attendance rates.
 function buildCtaRecord(date, hour) {
-  const { title, rows, battles: battleList, guild, provisional } = lastResult;
-  const { tagged, extrasFree, skippersFree } = view();
-  const skipBy = new Map((skippersFree || []).map((s) => [norm(s.name), s.when]));
-  const typesOf = (weapons) => (weapons || []).map((w) => [...w.types][0]);
-  const players = [];
-  const seen = new Set();
-  for (const r of rows) {
-    const name = rowName(r);
-    const status = rowStatus(r);
-    const attended = status === "pending" ? null : status !== "absent";
-    seen.add(norm(name));
-    players.push({
-      name, discord: r.discord, pos: r.pos, party: r.party, signedWeapon: r.weapon,
-      signed: true, attended, status, used: typesOf(r.used),
-      online: provisional ? !!r.member?.online : undefined, skip: skipBy.get(norm(name)) || null,
-    });
-  }
-  for (const t of tagged) {
-    if (seen.has(norm(t.name))) continue;
-    seen.add(norm(t.name));
-    const fought = t.fought ? [...t.fought.weapons.values()].sort((a, b) => b.count - a.count) : [];
-    players.push({ name: t.name, signed: false, attended: true, status: t.tag, used: typesOf(fought) });
-  }
-  for (const p of extrasFree) {
-    seen.add(norm(p.name));
-    players.push({ name: p.name, signed: false, attended: true, status: "unsigned", used: typesOf([...p.weapons.values()].sort((a, b) => b.count - a.count)) });
-  }
-  for (const s of skippersFree || []) {
-    if (!seen.has(norm(s.name))) players.push({ name: s.name, signed: false, attended: false, status: "skip", used: [], skip: s.when });
-  }
+  const { title, battles: battleList, guild, provisional } = lastResult;
+  const { list, voice } = playerList();
+  const typesOf = (weapons) => [...(weapons || [])].sort((a, b) => b.count - a.count).map((w) => [...w.types][0]);
+  const players = list.map((p) => {
+    const r = p.row, mark = markOf(p.name);
+    return {
+      name: p.name, discord: r?.discord, pos: r?.pos, party: r?.party, signedWeapon: r?.weapon,
+      signed: !!r, attended: p.attended, status: p.status,
+      used: typesOf(r?.used || (p.fought ? p.fought.weapons.values() : [])),
+      online: p.member ? !!p.member.online : undefined,
+      voice: voice.size ? p.inVoice : undefined,
+      late: mark.late || undefined,
+      skip: p.attended === false ? (p.skip?.when || (p.status === "skip" ? "online" : null)) : null,
+      obs: p.obs.map((x) => `${x.icon} ${x.text}`),
+    };
+  });
   return {
     date, hour, title, guild: guild.Name, provisional: !!provisional,
     battles: battleList.map((b) => ({ id: b.id, start: b.startTime, end: b.endTime })),
@@ -219,6 +205,7 @@ function playerStats(ctas) {
     p.wrong = entries.filter((e) => e.signed && e.attended && e.status === "wrong").length;
     p.unsigned = entries.filter((e) => !e.signed && e.attended && e.status === "unsigned").length;
     p.bombs = entries.filter((e) => e.status === "bomb" || e.status === "party").length;
+    p.late = entries.filter((e) => e.late && e.attended).length;
     p.skips = entries.filter((e) => e.skip && !e.attended).length;
     p.rate = p.total ? p.attended / p.total : 0;
     const weapons = new Map();
@@ -237,25 +224,27 @@ function cellHtml(c, p) {
   const key = ctaKey(c);
   const e = p.cells.get(key);
   // Unknown attendance is left out of the counts, so check it before eligibility.
+  const notes = e?.obs?.length ? `\n${e.obs.join("\n")}` : "";
   if (e?.attended === null) {
-    return `<td><span class="cell c-pending" title="${esc(`Anotado como ${e.signedWeapon} (#${e.pos}) · pre-registro sin killboard${e.online ? " · estaba online" : ""}`)}">⏳</span></td>`;
+    if (!e.signed) return `<td><span class="cell c-pending" title="${esc(`En el canal de Discord sin anotarse${notes}`)}">🎧</span></td>`;
+    return `<td><span class="cell c-pending" title="${esc(`Anotado como ${e.signedWeapon} (#${e.pos}) · pre-registro sin killboard${e.online ? " · estaba online" : ""}${e.voice === true ? " · en el canal" : e.voice === false ? " · no estaba en el canal" : ""}${notes}`)}">⏳</span></td>`;
   }
   if (!p.eligible.has(key)) return `<td></td>`;
   if (!e) return `<td class="muted" title="No se anotó y no fue">·</td>`;
   const skip = e.skip ? ` · ${SKIP_LABEL[e.skip]}` : "";
   if (!e.attended) {
     return e.signed
-      ? `<td><span class="cell c-noshow" title="Anotado como ${esc(e.signedWeapon)} (#${e.pos}) y no fue${esc(skip)}">✗</span></td>`
-      : `<td><span class="cell c-skip" title="No se anotó y no fue${esc(skip)}">🚫</span></td>`;
+      ? `<td><span class="cell c-noshow" title="${esc(`Anotado como ${e.signedWeapon} (#${e.pos}) y no fue${skip}${notes}`)}">✗</span></td>`
+      : `<td><span class="cell c-skip" title="${esc(`No se anotó y no fue${skip}${notes}`)}">🚫</span></td>`;
   }
   const type = e.used?.[0];
   const used = (e.used || []).map((t) => `${items[baseOf(t)] || baseOf(t)} ${tierOf(t)}`).join(", ") || "sin equipo visible";
-  const tag = e.status === "bomb" || e.status === "party" ? STATUS[e.status] : null;
+  const tag = ["bomb", "party", "late"].includes(e.status) ? STATUS[e.status] : null;
   const what = tag ? `${tag.icon} ${tag.label}` + (e.signed ? ` · anotado: ${e.signedWeapon} (#${e.pos})` : "")
     : e.signed ? `Anotado: ${e.signedWeapon} (#${e.pos}) · ${STATUS[e.status]?.label || e.status}` : "Fue sin anotarse";
-  const cls = tag ? `c-${e.status}` : e.signed ? `c-${e.status}` : "c-unsigned";
+  const cls = (tag ? `c-${e.status}` : e.signed ? `c-${e.status}` : "c-unsigned") + (e.late ? " late" : "");
   const icon = type ? `<img src="https://render.albiononline.com/v1/item/${encodeURIComponent(type)}.png?size=40" loading="lazy" alt="">` : tag ? tag.icon : "?";
-  return `<td><span class="cell ${cls}" title="${esc(`${what} · Usó: ${used}`)}">${icon}</span></td>`;
+  return `<td><span class="cell ${cls}" title="${esc(`${what} · Usó: ${used}${notes}`)}">${icon}</span></td>`;
 }
 
 function renderAttendance() {
@@ -287,19 +276,20 @@ function renderAttendance() {
     `✗ Anotó y no fue: <span>${sum("noshow")}</span>`,
     `👀 Fue sin anotarse: <span>${sum("unsigned")}</span>`,
     `💣 Bomb / otra party: <span>${sum("bombs")}</span>`,
+    `⏰ Llegaron tarde: <span>${sum("late")}</span>`,
     `Jugadores: <span>${players.length}</span>`,
   ].map((t) => `<div>${t}</div>`).join("") : `<p class="muted">Todavía no hay CTAs guardadas en este rango. Revisa una CTA y usa «Guardar CTA».</p>`;
 
   $("att-legend").innerHTML = [
     ["c-ok", "Arma correcta"], ["c-wrong", "Otra arma"], ["c-noeq", "Sin equipo visible / revisar"],
-    ["c-unsigned", "Fue sin anotarse"], ["c-bomb", "Bomb / otra party"], ["c-noshow", "Anotó y no fue", "✗"],
+    ["c-unsigned", "Fue sin anotarse"], ["c-bomb", "Bomb / otra party"], ["c-late", "Llegó tarde", "⏰"], ["c-noshow", "Anotó y no fue", "✗"],
     ["c-skip", "Conectado y no fue", "🚫"], ["c-pending", "Pre-registro (sin killboard)", "⏳"],
   ].map(([cls, label, mark]) => `<span class="legend-item"><span class="cell ${cls}">${mark || ""}</span>${label}</span>`).join("") +
     `<span class="legend-item">· no se anotó ni fue</span><span class="legend-item">vacío: aún no era del gremio</span>`;
 
   const head = `<thead><tr>
     <th class="sticky">Jugador</th><th>Asistencia</th><th>Fue</th><th>Anotó</th><th>Anotó y no fue</th>
-    <th>Arma equivocada</th><th>Sin anotarse</th><th>Bomb / otra party</th><th>Skips</th><th>Arma principal</th>
+    <th>Arma equivocada</th><th>Sin anotarse</th><th>Bomb / otra party</th><th>Tarde</th><th>Skips</th><th>Arma principal</th>
     ${ctas.map((c, i) => `<th class="cta" title="${esc((c.title || "") + (c.provisional ? " · pre-registro sin killboard" : ""))}">${c.provisional ? "⏳ " : ""}${shortDate(c.date)}<br>${c.hour}<br>👥 ${perCta[i]}</th>`).join("")}
   </tr></thead>`;
   const body = players.map((p) => {
@@ -311,7 +301,7 @@ function renderAttendance() {
       <td class="n"><span class="rate">${pct}%</span><span class="bar"><i style="width:${pct}%"></i></span></td>
       <td class="n">${p.attended}/${p.total}</td><td class="n">${p.signed}</td>
       <td class="n">${p.noshow || ""}</td><td class="n">${p.wrong || ""}</td>
-      <td class="n">${p.unsigned || ""}</td><td class="n">${p.bombs || ""}</td><td class="n">${p.skips || ""}</td><td>${main}</td>
+      <td class="n">${p.unsigned || ""}</td><td class="n">${p.bombs || ""}</td><td class="n">${p.late || ""}</td><td class="n">${p.skips || ""}</td><td>${main}</td>
       ${ctas.map((c) => cellHtml(c, p)).join("")}</tr>`;
   }).join("");
   $("att-table").innerHTML = head + `<tbody>${body}</tbody>`;
@@ -351,15 +341,15 @@ function exportCsv() {
     if (!e) return "";
     if (e.attended === null) return "pre-registro";
     if (!e.attended) return e.signed ? "anotó y no fue" : "conectado y no fue";
-    if (e.status === "bomb" || e.status === "party") return STATUS[e.status].label;
+    if (["bomb", "party", "late"].includes(e.status)) return STATUS[e.status].label;
     const weapon = e.used?.[0] ? items[baseOf(e.used[0])] || baseOf(e.used[0]) : "?";
     return e.signed ? `${weapon}${e.status === "wrong" ? " (otra arma)" : ""}` : `${weapon} (sin anotarse)`;
   };
   const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
-  const lines = [["Jugador", "Asistencia %", "Fue", "CTAs", "Anotó", "Anotó y no fue", "Arma equivocada", "Sin anotarse", "Bomb / otra party", "Skips",
+  const lines = [["Jugador", "Asistencia %", "Fue", "CTAs", "Anotó", "Anotó y no fue", "Arma equivocada", "Sin anotarse", "Bomb / otra party", "Tarde", "Skips",
     ...ctas.map((c) => `${c.date} ${c.hour}`)].map(q).join(";")];
   for (const p of players) {
-    lines.push([p.name, Math.round(p.rate * 100), p.attended, p.total, p.signed, p.noshow, p.wrong, p.unsigned, p.bombs, p.skips,
+    lines.push([p.name, Math.round(p.rate * 100), p.attended, p.total, p.signed, p.noshow, p.wrong, p.unsigned, p.bombs, p.late, p.skips,
       ...ctas.map((c) => code(c, p))].map(q).join(";"));
   }
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });

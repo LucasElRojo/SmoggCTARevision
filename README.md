@@ -11,16 +11,19 @@ No usa albionbb: lee la misma API pública del juego (`gameinfo.albiononline.com
    - Mac: `CTAChecker-mac` (Apple Silicon) o `CTAChecker-mac-intel`.
    - Linux: `CTAChecker-linux`.
    No hace falta instalar nada.
-2. **Lista del bot**: pega el mensaje de anotados (todas las partys que haya).
-   Opcional: en «Lista de miembros del gremio» pega la lista de miembros
-   exportada del juego ("Character Name", "Last Seen", "Roles") para ver quién
-   estaba conectado y no fue (ver «Conectados que no fueron» abajo).
+2. **Datos de la CTA** (paso 1): pega lo que tengas, todo es opcional salvo
+   una de las tres listas:
+   - el mensaje de anotados del bot (todas las partys que haya);
+   - la lista de miembros exportada del juego ("Character Name", "Last Seen",
+     "Roles"): dice quién está conectado;
+   - los nombres de quienes están en el canal de voz de Discord, uno por línea.
 3. **Batalla**: los killboards del gremio aparecen solos (los 50 más recientes).
    Filtra por mínimo de jugadores (30 por defecto) o del gremio, y usa
    «Cargar más antiguas» para seguir hacia atrás de a 50: los killboards a veces
    tardan días en aparecer. Marca todos los killboards del timer: un mismo
-   personaje puede salir en varios y cuenta una sola vez.
-4. **Revisar armas**: muestra, por puesto, qué arma usó cada uno.
+   personaje puede salir en varios y cuenta una sola vez. Sin killboard marcado,
+   «Revisar» hace un pre-registro (ver abajo).
+4. **Revisar**: una sola lista con todos los jugadores (ver abajo).
 5. **Mensaje para Discord**: copia el texto (se parte en mensajes de menos de
    2.000 caracteres si hace falta).
 6. **Guardar en el historial**: pon la fecha y la hora UTC de la CTA (la app
@@ -28,33 +31,54 @@ No usa albionbb: lee la misma API pública del juego (`gameinfo.albiononline.com
    pulsa «Registrar», o «No registrar» si no quieres guardarla. Si ya había una
    CTA con esa fecha y hora, pregunta antes de reemplazarla.
 
+Todas las horas se muestran en UTC, como las CTAs y la lista de miembros del juego.
+
+### La lista de jugadores
+
+Aparece todo jugador con alguna señal: anotado en el bot, visto en el
+killboard, en el canal de Discord, conectado al juego o marcado a mano. Columnas:
+
+| Columna | Qué muestra |
+|---|---|
+| Jugador | Nombre en el juego (y el de Discord si es distinto). «¿Nombre?» + Confirmar si el nombre se adivinó. |
+| Anotado | Arma y puesto en el bot. |
+| 🎮 Juego | 🟢 online, 📴 desconectado con la hora en que se le vio, ❔ no está en la lista de miembros. |
+| 🎧 Canal | Si está en el canal de Discord (y con qué nombre, si es distinto). |
+| ⚔️ Killboard | Armas con las que salió (solo con killboard). |
+| Estado | Ver la tabla «Estados». |
+| Observación | Lo que llama la atención, con ícono, por ejemplo: ⚠️ «Desconectado del juego pero en el canal de Discord: ¿se cayó o llega tarde?», 🔇 «Anotado pero no está en el canal», ⏱️ «Solo salió en 1 de 3 killboards: ¿llegó tarde?», ❔ «No está en la lista de miembros: ¿otro nombre?». |
+| Marcar | 💣 Bomb, 🎯 Otra party, ⏰ Llegó tarde. |
+
+Se puede ordenar por estado (lo más grave primero) o por puesto, y ocultar
+estados. Debajo de la lista se pueden marcar varios nombres a la vez, escritos
+separados por coma mirando las fotos de las partys.
+
+### Marcas: bombs, otras partys y llegadas tarde
+
+- **💣 Bomb / 🎯 Otra party**: quien juega en una bomb u otra party no se anota
+  en el bot. Cuenta como presente.
+- **⏰ Llegó tarde**: asistió aunque llegó tarde. Un anotado que no sale en el
+  killboard (o un pre-registro, alguien en el canal o un skip) pasa a contar
+  como presente, con la advertencia; quien sí salió en el killboard conserva su
+  estado de arma y queda anotado como tarde.
+
+Las marcas se mantienen hasta que pulses «Limpiar marcas», así que sirven para
+el pre-registro y para la revisión posterior con el killboard.
+
 ### Pre-registro sin killboard
 
 Los killboards pueden tardar días en aparecer. Si pulsas «Revisar» sin marcar
-ningún killboard, la app hace un **pre-registro** con la lista del bot y la
-lista de miembros:
-
-- Anotados que están online y anotados que no aparecen online.
-- 🚫 **Conectados sin anotarse**: miembros online que no están en la lista del
-  bot (para ver quién está skipeando).
-- El mensaje para Discord con todo eso.
+ningún killboard, la app hace un **pre-registro** con las listas que pegaste:
+quién se anotó, quién está conectado al juego y quién está en el canal, con las
+mismas observaciones. Los nombres del canal se cruzan sin importar mayúsculas,
+con los alias de la pestaña Jugadores y tolerando una letra distinta (I y l).
 
 Al registrarlo, la app avisa «Estás registrando sin el killboard, ¿estás
-seguro?» (Sí / No). Se guarda marcado con ⏳: no cuenta para el % de asistencia
-de los anotados (todavía no se sabe si fueron), pero sí registra a los
-conectados sin anotarse y a las bombs. Cuando aparezca el killboard, revisa de
-nuevo con la misma lista y regístralo con la misma fecha y hora para
-reemplazarlo.
-
-### Bombs y otras partys
-
-Quien juega la CTA en una bomb u otra party no se anota en el bot. Márcalo con
-los botones **💣 Bomb** o **🎯 Otra party** junto a su nombre (en los
-anotados que no aparecen, en «Gente no registrada» o en «Conectados»), o
-escribe los nombres en «Bombs y otras partys» mirando las fotos de las partys.
-Cuentan como presentes, salen aparte en el mensaje de Discord y en la
-asistencia. Las marcas se mantienen hasta que pulses «Limpiar marcas», así que
-sirven para el pre-registro y para la revisión posterior con el killboard.
+seguro?» (Sí / No). Se guarda marcado con ⏳: los anotados y los que solo están
+en el canal no cuentan para el % de asistencia (todavía no se sabe si fueron),
+pero sí quedan los skips, las bombs y las llegadas tarde. Cuando aparezca el
+killboard, revisa de nuevo con las mismas listas y regístralo con la misma
+fecha y hora para reemplazarlo.
 
 ## Asistencia
 
@@ -70,6 +94,8 @@ el arma que llevó, con el borde según cómo le fue:
 | Borde azul | Fue sin anotarse. |
 | Borde morado | Fue en una bomb u otra party. |
 | ⏳ | Pre-registro: se anotó, pero aún no hay killboard (no cuenta para el %). |
+| 🎧 | Pre-registro: estaba en el canal sin anotarse (no cuenta para el %). |
+| Borde punteado / ⏰ | Llegó tarde. |
 | ✗ | Se anotó y no fue. |
 | 🚫 | Estaba conectado y no fue (si se pegó la lista de miembros al revisar). |
 | · | No se anotó ni fue. |
@@ -77,7 +103,7 @@ el arma que llevó, con el borde según cómo le fue:
 
 Al lado de cada jugador: % de asistencia, veces que fue, veces que se anotó,
 veces que se anotó y no fue, veces con arma equivocada, veces que fue sin
-anotarse, skips y su arma más usada. Arriba, la asistencia global y el promedio
+anotarse, veces en bomb u otra party, llegadas tarde, skips y su arma más usada. Al pasar el mouse por una celda se ven las observaciones de esa CTA. Arriba, la asistencia global y el promedio
 por CTA. Se puede filtrar por fechas y por hora, buscar, ordenar y exportar a
 CSV (se abre con Excel).
 
@@ -102,9 +128,13 @@ otra PC.
 | ⚠️ Revisar | Battlemount sin montura de batalla vista. |
 | ⚠️ Sin equipo visible | Estuvo en la batalla, pero no participó en ninguna kill, así que la API no muestra su equipo. |
 | ❓ Arma sin mapear | El nombre del bot no está en la pestaña Armas. |
-| 👻 No participó | No aparece en los killboards marcados (o se anotó con otro nombre). |
-| 👀 GENTE NO REGISTRADA | Jugadores del gremio que estuvieron en la batalla pero no estaban en la lista. |
-| 🚫 Conectados que no fueron | Miembros de la lista del juego que no aparecen en ningún killboard marcado. |
+| 👻 No participó | Se anotó y no aparece en los killboards marcados (o se anotó con otro nombre). |
+| ⏳ Sin killboard | Pre-registro: se anotó, todavía no se sabe si fue. |
+| 👀 Sin anotarse | Salió en el killboard sin estar en la lista del bot. |
+| 🎧 En el canal | Está en el canal de Discord, sin anotarse y sin salir en el killboard. |
+| 🚫 Skip | Conectado al juego, sin anotarse (ni en el canal) o sin salir en el killboard. |
+| 💣 Bomb / 🎯 Otra party | Marcado a mano: jugó en otro grupo. |
+| ⏰ Llegó tarde | Marcado a mano: asistió tarde. |
 
 ### Conectados que no fueron
 
