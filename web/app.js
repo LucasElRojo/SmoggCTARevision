@@ -453,21 +453,14 @@ function judge(entry, found) {
 
 // Officers mark players by hand: a group (bomb or another party: players who
 // fight outside the bot's parties and never sign up) and/or a late arrival.
-// Both count as present. Marks stay until "Limpiar marcas", so a
-// pre-registration and the later check with the killboard share them.
+// Both count as present. Marks belong to one CTA: every check starts without
+// them, and the CTA's saved record (same date and hour) brings its marks back,
+// so a pre-registration and the later check with the killboard share them.
 const TAGS = {
   bomb: { label: "Bomb", icon: "💣" },
   party: { label: "Otra party", icon: "🎯" },
 };
 let tags = new Map(); // norm(name) -> { name, tag: "bomb" | "party" | null, late: bool }
-
-function loadTags() {
-  try { tags = new Map(JSON.parse(localStorage.getItem("cta-tags") || "[]").map((t) => [norm(t.name), t])); } catch { tags = new Map(); }
-}
-
-function saveTags() {
-  try { localStorage.setItem("cta-tags", JSON.stringify([...tags.values()])); } catch {}
-}
 
 // mark is "bomb", "party" or "late"; setting the active one again removes it.
 function toggleMark(name, mark, on) {
@@ -476,7 +469,6 @@ function toggleMark(name, mark, on) {
   if (mark === "late") t.late = on ?? !t.late;
   else t.tag = (on ?? t.tag !== mark) ? mark : null;
   if (t.tag || t.late) tags.set(key, t); else tags.delete(key);
-  saveTags();
 }
 
 const markOf = (name) => tags.get(norm(name)) || { tag: null, late: false };
@@ -539,6 +531,7 @@ async function analyze() {
       extras = [...players.entries()].filter(([k]) => !taken.has(k)).map(([, p]) => p);
       if (members.length) skippers = findSkippers(members, players, battleList, rows);
     }
+    tags = new Map();
     lastResult = { title, rows, extras, skippers, members, voiceNames, battles: battleList, guild, provisional };
     $("progress").textContent = "";
     renderResults();
@@ -939,7 +932,7 @@ function bind() {
       return;
     }
     if (e.target.closest("[data-clear-tags]")) {
-      if (await askYesNo("¿Quitar todas las marcas (bomb, otra party y llegó tarde)?")) { tags.clear(); saveTags(); renderResults(); }
+      if (await askYesNo("¿Quitar todas las marcas (bomb, otra party y llegó tarde)?")) { tags.clear(); renderResults(); }
       return;
     }
     const btn = e.target.closest("[data-confirm]");
@@ -1008,7 +1001,7 @@ function askYesNo(message) {
 }
 
 async function init() {
-  loadTags();
+  try { localStorage.removeItem("cta-tags"); } catch {}
   items = await (await fetch("items.json")).json();
   $("item-names").innerHTML = [...new Set(Object.values(items))].sort().map((n) => `<option value="${esc(n)}">`).join("");
   await loadConfig();

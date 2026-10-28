@@ -62,8 +62,11 @@ separados por coma mirando las fotos de las partys.
   como presente, con la advertencia; quien sí salió en el killboard conserva su
   estado de arma y queda anotado como tarde.
 
-Las marcas se mantienen hasta que pulses «Limpiar marcas», así que sirven para
-el pre-registro y para la revisión posterior con el killboard.
+Las marcas son **de cada CTA**: cada revisión empieza sin marcas, porque quien
+fue de bomb en una CTA puede ir a la zerg principal en la siguiente. Si la
+fecha y la hora UTC del paso 6 coinciden con una CTA ya registrada (por ejemplo
+un pre-registro que ahora revisas con el killboard), sus marcas se cargan
+solas. «Limpiar marcas» las quita todas.
 
 ### Pre-registro sin killboard
 

@@ -63,7 +63,32 @@ function showSaveStep() {
   const slot = suggestSlot(starts.length ? new Date(Math.min(...starts)) : new Date());
   $("save-date").value = slot.date;
   $("save-hour").value = slot.hour;
-  renderDiscord();
+  if (!loadSlotMarks()) renderDiscord();
+}
+
+// The bomb / other party / late marks saved with this CTA's record.
+function marksFromRecord(record) {
+  const marks = new Map();
+  for (const p of record.players) {
+    const tag = p.status === "bomb" || p.status === "party" ? p.status : null;
+    if (tag || p.late) marks.set(norm(p.name), { name: p.name, tag, late: !!p.late });
+  }
+  return marks;
+}
+
+// When the date and hour match a saved CTA and nothing is marked yet, its
+// marks come back (a pre-registration checked again with the killboard).
+// Returns true when it re-rendered the results.
+function loadSlotMarks() {
+  const hour = normHour($("save-hour").value);
+  const record = attHistory.ctas.find((c) => c.date === $("save-date").value && c.hour === hour);
+  if (!record || tags.size) return false;
+  const marks = marksFromRecord(record);
+  if (!marks.size) return false;
+  tags = marks;
+  renderResults();
+  $("save-status").textContent = `Se cargaron ${marks.size} marca(s) del registro guardado de esta CTA.`;
+  return true;
 }
 
 // One record per listed player (see playerList). attended is null when it is
@@ -369,7 +394,9 @@ function bindHistory() {
   }));
   $("save-cta").addEventListener("click", saveCta);
   $("skip-save").addEventListener("click", () => { $("save-status").textContent = "No se registró."; });
-  ["save-date", "save-hour"].forEach((id) => $(id).addEventListener("input", renderDiscord));
+  ["save-date", "save-hour"].forEach((id) => $(id).addEventListener("input", () => {
+    if (!lastResult || !loadSlotMarks()) renderDiscord();
+  }));
   $("roster-save").addEventListener("click", updateRoster);
   $("att-csv").addEventListener("click", exportCsv);
   ["att-from", "att-to", "att-hour", "att-members", "att-sort"].forEach((id) => $(id).addEventListener("change", renderAttendance));
